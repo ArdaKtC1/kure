@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Küre - Final Versiyon</title>
+    <style>
+        :root { --bg: #121212; --board: #2c3e50; --player: #9b59b6; --bot: #e67e22; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 10px; touch-action: manipulation; }
+        #game-info { margin-bottom: 10px; text-align: center; }
+        .board { display: grid; grid-template-columns: repeat(7, 45px); grid-template-rows: repeat(7, 45px); gap: 4px; background: #444; padding: 8px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .cell { width: 45px; height: 45px; background: var(--board); border-radius: 5px; display: flex; justify-content: center; align-items: center; position: relative; }
+        .piece { width: 34px; height: 34px; border-radius: 50%; box-shadow: 0 3px 6px rgba(0,0,0,0.4); }
+        .p1 { background: var(--player); border: 2px solid #bdc3c7; } /* Sen */
+        .p2 { background: var(--bot); border: 2px solid #bdc3c7; }    /* Bot */
+        .selected { outline: 3px solid white; transform: scale(1.1); z-index: 2; }
+        #status { margin-top: 15px; font-weight: bold; color: #f1c40f; min-height: 24px; }
+        .score-board { display: flex; gap: 20px; margin-top: 10px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+    <div id="game-info">
+        <h3 style="margin:5px">KÜRE STRATEJİ</h3>
+        <div class="score-board">
+            <div>Sen (Mor): <span id="s1">0</span>/4</div>
+            <div>Bot (Turuncu): <span id="s2">0</span>/4</div>
+        </div>
+    </div>
+
+    <div class="board" id="board"></div>
+    <div id="status">Sıra sende...</div>
+
+    <script>
+        const boardSize = 7;
+        const boardEl = document.getElementById('board');
+        let board = Array(boardSize).fill().map(() => Array(boardSize).fill(0));
+        let selected = null;
+        let p1Captured = 0, p2Captured = 0;
+
+        function init() {
+            // Başlangıç dizilimi: En üst ve en alt sıralar
+            for(let i=0; i<7; i++) {
+                board[0][i] = 2; // Bot
+                board[6][i] = 1; // Oyuncu
+            }
+            render();
+        }
+
+        function render() {
+            boardEl.innerHTML = '';
+            for(let r=0; r<7; r++) {
+                for(let c=0; c<7; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if(board[r][c] !== 0) {
+                        const p = document.createElement('div');
+                        p.className = `piece p${board[r][c]}`;
+                        if(selected && selected.r === r && selected.c === c) p.classList.add('selected');
+                        cell.appendChild(p);
+                    }
+                    cell.onclick = () => handleClick(r, c);
+                    boardEl.appendChild(cell);
+                }
+            }
+            document.getElementById('s1').innerText = p1Captured;
+            document.getElementById('s2').innerText = p2Captured;
+        }
+
+        function handleClick(r, c) {
+            if(board[r][c] === 1) {
+                selected = {r, c};
+                render();
+            } else if(selected) {
+                if(isValidMove(selected.r, selected.c, r, c, 1)) {
+                    executeMove(selected.r, selected.c, r, c, 1);
+                    selected = null;
+                    if(!checkGameOver()) {
+                        document.getElementById('status').innerText = "Bot hamle yapıyor...";
+                        setTimeout(botAction, 600);
+                    }
+                } else {
+                    document.getElementById('status').innerText = "Geçersiz hamle!";
+                }
+            }
+        }
+
+        function isValidMove(fr, fc, tr, tc, p) {
+            if(board[tr][tc] !== 0) return false; // Hedef doluysa gidemez
+
+            let dr = tr - fr; // Satır farkı
+            let dc = tc - fc; // Sütun farkı
+
+            // KÜRE KRİTİK KURALI: SADECE 1 BİRİM VE YAN GİTMEK YASAK
+            // dr === 0 ise bu yan gitmektir. dc === 0 dikey, abs'ler eşitse çaprazdır.
+            if(dr === 0) return false; // YAN GİTMEK KESİNLİKLE YASAK
+            if(Math.abs(dr) > 1 || Math.abs(dc) > 1) return false; // Sadece 1 kare
+
+            // Başlangıç kalesine geri dönme yasağı
+            if(p === 1 && tr === 6) return false;
+            if(p === 2 && tr === 0) return false;
+
+            // 4'lü yan yana gelme yasağı kontrolü
+            if(checkFourInARow(tr, tc, p)) return false;
+
+            return true;
+        }
+
+        function checkFourInARow(r, c, p) {
+            const dirs
